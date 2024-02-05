@@ -115,10 +115,10 @@ func (d *Deadman) Stop() {
 func amNotifier(amURL string, logger log.Logger) func() error {
 	alerts := []*model.Alert{{
 		Labels: model.LabelSet{
-			model.LabelName("alertname"): model.LabelValue("DeadmanDead"),
+			model.LabelName("alertname"): model.LabelValue("PrometheusAlertPipelineFailed"),
 		},
 		Annotations: model.LabelSet{
-			model.LabelName("description"): model.LabelValue("Prometheus Watchdog is Dead!"),
+			model.LabelName("description"): model.LabelValue("Alertmanager does not receive any Watchdog/Deadman alert heartbeat. Please check the connectivity between Prometheus and Alertmanager"),
 		},
 	}}
 
