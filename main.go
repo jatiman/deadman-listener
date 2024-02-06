@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
@@ -19,10 +20,11 @@ import (
 )
 
 var (
-	amURL    string
-	interval model.Duration
-	logLevel promlog.AllowedLevel
-	httpPort string
+	amURL            string
+	interval         model.Duration
+	logLevel         promlog.AllowedLevel
+	httpPort         string
+	additionalLabels string
 )
 
 func main() {
@@ -36,6 +38,9 @@ func main() {
 		Default("30s").SetValue(&interval)
 	app.Flag("deadman.port", "The HTTP port that will be used by Deadman.").
 		Default("9095").StringVar(&httpPort)
+	app.Flag("alert.labels", "Additional labels to be added to alerts.").
+		PlaceHolder("key1=value1,key2=value2,...").
+		StringVar(&additionalLabels)
 
 	promlogConfig := &promlog.Config{Level: &logLevel}
 	promlogflag.AddFlags(app, promlogConfig)
@@ -55,7 +60,7 @@ func main() {
 	http.Handle("/ping", simpleHandler(pinger, logger))
 	go http.ListenAndServe(":"+httpPort, nil)
 
-	d, err := deadman.NewDeadMan(pinger, time.Duration(interval), amURL, log.With(logger, "component", "deadman"))
+	d, err := deadman.NewDeadMan(pinger, time.Duration(interval), amURL, log.With(logger, "component", "deadman"), parseAdditionalLabels(additionalLabels))
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		os.Exit(2)
@@ -72,6 +77,20 @@ func simpleHandler(pinger chan<- time.Time, logger log.Logger) http.HandlerFunc 
 		pinger <- time.Now()
 		fmt.Fprint(w, "pong")
 	}
+}
+
+func parseAdditionalLabels(labelsStr string) model.LabelSet {
+	r := make(model.LabelSet)
+
+	keyvals := strings.Split(labelsStr, ",")
+	for _, keyval := range keyvals {
+		kv := strings.SplitN(keyval, "=", 2)
+		if len(kv) == 2 {
+			r[model.LabelName(kv[0])] = model.LabelValue(kv[1])
+		}
+	}
+
+	return r
 }
 
 func banner() {

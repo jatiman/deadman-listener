@@ -46,27 +46,27 @@ func init() {
 }
 
 type Deadman struct {
-	pinger   <-chan time.Time
-	interval time.Duration
-	ticker   *time.Ticker
-	closer   chan struct{}
-
-	notifier func() error
-
-	logger log.Logger
+	pinger           <-chan time.Time
+	interval         time.Duration
+	ticker           *time.Ticker
+	closer           chan struct{}
+	notifier         func() error
+	logger           log.Logger
+	additionalLabels model.LabelSet
 }
 
-func NewDeadMan(pinger <-chan time.Time, interval time.Duration, amURL string, logger log.Logger) (*Deadman, error) {
-	return newDeadMan(pinger, interval, amNotifier(amURL, logger), logger), nil
+func NewDeadMan(pinger <-chan time.Time, interval time.Duration, amURL string, logger log.Logger, additionalLabels model.LabelSet) (*Deadman, error) {
+	return newDeadMan(pinger, interval, amNotifier(amURL, logger, additionalLabels), logger, additionalLabels), nil
 }
 
-func newDeadMan(pinger <-chan time.Time, interval time.Duration, notifier func() error, logger log.Logger) *Deadman {
+func newDeadMan(pinger <-chan time.Time, interval time.Duration, notifier func() error, logger log.Logger, additionalLabels model.LabelSet) *Deadman {
 	return &Deadman{
-		pinger:   pinger,
-		interval: interval,
-		notifier: notifier,
-		closer:   make(chan struct{}),
-		logger:   logger,
+		pinger:           pinger,
+		interval:         interval,
+		notifier:         notifier,
+		closer:           make(chan struct{}),
+		logger:           logger,
+		additionalLabels: additionalLabels,
 	}
 }
 
@@ -112,17 +112,18 @@ func (d *Deadman) Stop() {
 	d.closer <- struct{}{}
 }
 
-func amNotifier(amURL string, logger log.Logger) func() error {
+func amNotifier(amURL string, logger log.Logger, additionalLabels model.LabelSet) func() error {
 	alerts := []*model.Alert{{
 		Labels: model.LabelSet{
 			model.LabelName("alertname"): model.LabelValue("PrometheusAlertPipelineFailed"),
-		},
+		}.Merge(additionalLabels),
 		Annotations: model.LabelSet{
 			model.LabelName("description"): model.LabelValue("Alertmanager does not receive any Watchdog/Deadman alert heartbeat. Please check the connectivity between Prometheus and Alertmanager"),
 		},
 	}}
 
 	b, err := json.Marshal(alerts)
+
 	if err != nil {
 		return func() error {
 			return fmt.Errorf("error in json.Marshal: %v", err)
