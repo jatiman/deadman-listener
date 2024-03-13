@@ -56,7 +56,7 @@ type Deadman struct {
 }
 
 func NewDeadMan(pinger <-chan time.Time, interval time.Duration, amURL string, logger log.Logger, additionalLabels model.LabelSet) (*Deadman, error) {
-	return newDeadMan(pinger, interval, amNotifier(amURL, logger, additionalLabels), logger, additionalLabels), nil
+	return newDeadMan(pinger, interval, amNotifier(amURL, additionalLabels), logger, additionalLabels), nil
 }
 
 func newDeadMan(pinger <-chan time.Time, interval time.Duration, notifier func() error, logger log.Logger, additionalLabels model.LabelSet) *Deadman {
@@ -73,7 +73,7 @@ func newDeadMan(pinger <-chan time.Time, interval time.Duration, notifier func()
 func (d *Deadman) Run() error {
 	d.ticker = time.NewTicker(d.interval)
 
-	skip := false
+	skip := true
 
 	for {
 		select {
@@ -82,6 +82,7 @@ func (d *Deadman) Run() error {
 
 			if !skip {
 				ticksNotified.Inc()
+				level.Warn(d.logger).Log("msg", "no heartbeat received within the time interval", "interval", d.interval)
 				if d.notifier != nil {
 					if err := d.notifier(); err != nil {
 						failedNotifications.Inc()
@@ -112,7 +113,7 @@ func (d *Deadman) Stop() {
 	d.closer <- struct{}{}
 }
 
-func amNotifier(amURL string, logger log.Logger, additionalLabels model.LabelSet) func() error {
+func amNotifier(amURL string, additionalLabels model.LabelSet) func() error {
 	alerts := []*model.Alert{{
 		Labels: model.LabelSet{
 			model.LabelName("alertname"): model.LabelValue("PrometheusAlertPipelineFailed"),
